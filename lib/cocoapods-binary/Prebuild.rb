@@ -7,10 +7,10 @@ require_relative 'helper/target_checker'
 module Pod
     class Installer
 
-        
+
         private
 
-        def local_manifest 
+        def local_manifest
             if not @local_manifest_inited
                 @local_manifest_inited = true
                 raise "This method should be call before generate project" unless self.analysis_result == nil
@@ -26,25 +26,25 @@ module Pod
                 changes = local_manifest.detect_changes_with_podfile(podfile)
                 @prebuild_pods_changes = Analyzer::SpecsState.new(changes)
                 # save the chagnes info for later stage
-                Pod::Prebuild::Passer.prebuild_pods_changes = @prebuild_pods_changes 
+                Pod::Prebuild::Passer.prebuild_pods_changes = @prebuild_pods_changes
             end
             @prebuild_pods_changes
         end
 
-        
-        public 
+
+        public
 
         # check if need to prebuild
         def have_exact_prebuild_cache?
             # check if need build frameworks
             return false if local_manifest == nil
-            
+
             changes = prebuild_pods_changes
             added = changes.added
-            changed = changes.changed 
+            changed = changes.changed
             unchanged = changes.unchanged
-            deleted = changes.deleted 
-            
+            deleted = changes.deleted
+
             exsited_framework_pod_names = sandbox.exsited_framework_pod_names
             missing = unchanged.select do |pod_name|
                 not exsited_framework_pod_names.include?(pod_name)
@@ -53,8 +53,8 @@ module Pod
             needed = (added + changed + deleted + missing)
             return needed.empty?
         end
-        
-        
+
+
         # The install method when have completed cache
         def install_when_cache_hit!
             # just print log
@@ -62,28 +62,28 @@ module Pod
                 UI.puts "Using #{name}"
             end
         end
-    
+
 
         # Build the needed framework files
-        def prebuild_frameworks! 
+        def prebuild_frameworks!
 
             # build options
             sandbox_path = sandbox.root
             existed_framework_folder = sandbox.generate_framework_path
             bitcode_enabled = Pod::Podfile::DSL.bitcode_enabled
             targets = []
-            
+
             if local_manifest != nil
 
                 changes = prebuild_pods_changes
                 added = changes.added
-                changed = changes.changed 
+                changed = changes.changed
                 unchanged = changes.unchanged
-                deleted = changes.deleted 
-    
+                deleted = changes.deleted
+
                 existed_framework_folder.mkdir unless existed_framework_folder.exist?
                 exsited_framework_pod_names = sandbox.exsited_framework_pod_names
-    
+
                 # additions
                 missing = unchanged.select do |pod_name|
                     not exsited_framework_pod_names.include?(pod_name)
@@ -104,6 +104,12 @@ module Pod
 
                 # add the dendencies
                 dependency_targets = targets.map {|t| t.recursive_dependent_targets }.flatten.uniq || []
+
+                # filter already built dependencies
+                dependency_targets = dependency_targets.reject { |t|
+                    local_manifest.version(t.name).to_s.eql? t.version.to_s
+                }
+                
                 targets = (targets + dependency_targets).uniq
             else
                 targets = self.pod_targets
@@ -111,7 +117,7 @@ module Pod
 
             targets = targets.reject {|pod_target| sandbox.local?(pod_target.pod_name) }
 
-            
+
             # build!
             Pod::UI.puts "Prebuild frameworks (total #{targets.count})"
             Pod::Prebuild.remove_build_dir(sandbox_path)
@@ -152,7 +158,7 @@ module Pod
                     Prebuild::Passer.resources_to_copy_for_static_framework[target.name] = path_objects
                 end
 
-            end            
+            end
             Pod::Prebuild.remove_build_dir(sandbox_path)
 
 
@@ -160,10 +166,10 @@ module Pod
             targets.each do |target|
                 root_path = self.sandbox.pod_dir(target.name)
                 target_folder = sandbox.framework_folder_path_for_target_name(target.name)
-                
+
                 # If target shouldn't build, we copy all the original files
                 # This is for target with only .a and .h files
-                if not target.should_build? 
+                if not target.should_build?
                     Prebuild::Passer.target_names_to_skip_integration_framework << target.name
                     FileUtils.cp_r(root_path, target_folder, :remove_destination => true)
                     next
@@ -183,15 +189,15 @@ module Pod
                 end
             end
 
-            # save the pod_name for prebuild framwork in sandbox 
+            # save the pod_name for prebuild framwork in sandbox
             targets.each do |target|
                 sandbox.save_pod_name_for_target target
             end
-            
+
             # Remove useless files
             # remove useless pods
             all_needed_names = self.pod_targets.map(&:name).uniq
-            useless_target_names = sandbox.exsited_framework_target_names.reject do |name| 
+            useless_target_names = sandbox.exsited_framework_target_names.reject do |name|
                 all_needed_names.include? name
             end
             useless_target_names.each do |name|
@@ -199,7 +205,7 @@ module Pod
                 path.rmtree if path.exist?
             end
 
-            if not Podfile::DSL.dont_remove_source_code 
+            if not Podfile::DSL.dont_remove_source_code
                 # only keep manifest.lock and framework folder in _Prebuild
                 to_remain_files = ["Manifest.lock", File.basename(existed_framework_folder)]
                 to_delete_files = sandbox_path.children.select do |file|
@@ -209,20 +215,20 @@ module Pod
                 to_delete_files.each do |path|
                     path.rmtree if path.exist?
                 end
-            else 
+            else
                 # just remove the tmp files
                 path = sandbox.root + 'Manifest.lock.tmp'
                 path.rmtree if path.exist?
             end
-            
+
 
 
         end
-        
-        
+
+
         # patch the post install hook
         old_method2 = instance_method(:run_plugins_post_install_hooks)
-        define_method(:run_plugins_post_install_hooks) do 
+        define_method(:run_plugins_post_install_hooks) do
             old_method2.bind(self).()
             if Pod::is_prebuild_stage
                 self.prebuild_frameworks!
